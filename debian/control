@@ -7,7 +7,7 @@ Standards-Version: 3.9.3
 
 Package: hitch
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libev, openssl
+Depends: ${shlibs:Depends}, ${misc:Depends}, libev4, openssl
 Description: hitch 1.4.6
 
 Package: hitch-dbg
