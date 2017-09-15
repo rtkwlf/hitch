@@ -33,3 +33,5 @@ parse_proxy_v2
 hitch.conf.5
 .dirstamp
 hitch.conf.example
+/debian/files
+/debian/hitch*

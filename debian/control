@@ -1,0 +1,17 @@
+Source: hitch
+Section: unknown
+Priority: extra
+Maintainer: Arctic Wolf Networks Inc. Development <dev@arcticwolf.com>
+Build-Depends: debhelper (>= 8.0.0), autotools-dev, libev-dev, libssl-dev, automake, python-docutils, flex, bison, pkg-config
+Standards-Version: 3.9.3
+
+Package: hitch
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libev, openssl
+Description: hitch 1.4.6
+
+Package: hitch-dbg
+Architecture: any
+Section: debug
+Depends: hitch (= ${binary:Version})
+Description: hitch 1.4.6 debug package

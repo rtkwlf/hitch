@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+%:
+	dh $@ --buildsystem=autoconf
+
+override_dh_auto_build:
+	dh_auto_build --buildsystem=autoconf
+
+override_dh_auto_configure:
+	dh_auto_configure -- 
+
+# This is to be able to have both a debug and a binary package
+# specified without needing to explicitly create install files.
+override_dh_auto_install:
+	dh_auto_install --destdir=debian/hitch
+
+.PHONY: override_dh_strip
+override_dh_strip:
+	dh_strip --dbg-package=hitch-dbg
