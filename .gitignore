@@ -4,7 +4,8 @@ core
 core.*
 *.a
 *.o
-*.in
+Makefile.in
+config.h.in
 *~
 .deps
 *.sw[op]
@@ -35,3 +36,6 @@ hitch.conf.5
 hitch.conf.example
 /debian/files
 /debian/hitch*
+/debian/debhelper-build-stamp
+/dist/
+VERSION
