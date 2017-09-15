@@ -152,6 +152,7 @@ typedef struct proxystate {
 	struct sockaddr_storage	remote_ip;	/* Remote ip returned
 						 * from `accept` */
 	int			connect_port;	/* local port for connection */
+	struct addrinfo *backaddr;
 } proxystate;
 
 

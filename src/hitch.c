@@ -116,7 +116,6 @@ hitch_config *CONFIG;
 /* Worker proc's read side of mgt->worker pipe(2) */
 static ev_io mgt_rd;
 
-static struct addrinfo *backaddr;
 static pid_t master_pid;
 static pid_t ocsp_proc_pid;
 static int core_id;
@@ -1417,7 +1416,7 @@ create_frontend(const struct front_arg *fa)
 /* Initiate a clear-text nonblocking connect() to the backend IP on behalf
  * of a newly connected upstream (encrypted) client */
 static int
-create_back_socket()
+create_back_socket(struct addrinfo *backaddr)
 {
 	int s = socket(backaddr->ai_family, SOCK_STREAM, IPPROTO_TCP);
 
@@ -1483,6 +1482,7 @@ shutdown_proxy(proxystate *ps, SHUTDOWN_REQUESTOR req)
 
 		close(ps->fd_up);
 		close(ps->fd_down);
+		freeaddrinfo(ps->backaddr);
 
 		ringbuffer_cleanup(&ps->ring_clear2ssl);
 		ringbuffer_cleanup(&ps->ring_ssl2clear);
@@ -1523,7 +1523,7 @@ start_connect(proxystate *ps)
 {
 	int t = 1;
 	CHECK_OBJ_NOTNULL(ps, PROXYSTATE_MAGIC);
-	t = connect(ps->fd_down, backaddr->ai_addr, backaddr->ai_addrlen);
+	t = connect(ps->fd_down, ps->backaddr->ai_addr, ps->backaddr->ai_addrlen);
 	if (t == 0 || errno == EINPROGRESS || errno == EINTR) {
 		ev_io_start(loop, &ps->ev_w_connect);
 		ev_timer_start(loop, &ps->ev_t_connect);
@@ -1622,7 +1622,7 @@ handle_connect(struct ev_loop *loop, ev_io *w, int revents)
 	(void)revents;
 	CAST_OBJ_NOTNULL(ps, w->data, PROXYSTATE_MAGIC);
 
-	t = connect(ps->fd_down, backaddr->ai_addr, backaddr->ai_addrlen);
+	t = connect(ps->fd_down, ps->backaddr->ai_addr, ps->backaddr->ai_addrlen);
 	if (!t || errno == EISCONN || !errno) {
 		ev_io_stop(loop, &ps->ev_w_connect);
 		ev_timer_stop(loop, &ps->ev_t_connect);
@@ -2219,6 +2219,8 @@ handle_accept(struct ev_loop *loop, ev_io *w, int revents)
 	struct frontend *fr;
 	proxystate *ps;
 	socklen_t sl = sizeof(addr);
+	struct addrinfo *backaddr;
+	struct addrinfo hints;
 
 #if HAVE_ACCEPT4==1
 	int client = accept4(w->fd, (struct sockaddr *) &addr, &sl,
@@ -2272,9 +2274,22 @@ handle_accept(struct ev_loop *loop, ev_io *w, int revents)
 
 	settcpkeepalive(client);
 
-	int back = create_back_socket();
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = 0;
+	const int gai_err = getaddrinfo(CONFIG->BACK_IP, CONFIG->BACK_PORT,
+	    &hints, &backaddr);
+	if (gai_err != 0) {
+		(void)close(client);
+		ERR("{getaddrinfo-backend}: %s\n", gai_strerror(gai_err));
+		return;
+	}
+
+	int back = create_back_socket(backaddr);
 	if (back == -1) {
 		(void) close(client);
+		freeaddrinfo(backaddr);
 		ERR("{backend-socket}: %s\n", strerror(errno));
 		return;
 	}
@@ -2289,6 +2304,7 @@ handle_accept(struct ev_loop *loop, ev_io *w, int revents)
 	if (ssl == NULL) {
 		(void)close(back);
 		(void)close(client);
+		freeaddrinfo(backaddr);
 		ERR("{SSL_new}: %s\n", strerror(errno));
 		return;
 	}
@@ -2298,6 +2314,7 @@ handle_accept(struct ev_loop *loop, ev_io *w, int revents)
 		SSL_free(ssl);
 		(void)close(back);
 		(void)close(client);
+		freeaddrinfo(backaddr);
 		ERR("{malloc-err}: %s\n", strerror(errno));
 		return;
 	}
@@ -2310,6 +2327,7 @@ handle_accept(struct ev_loop *loop, ev_io *w, int revents)
 	SSL_set_accept_state(ssl);
 	SSL_set_fd(ssl, client);
 
+	ps->backaddr = backaddr;
 	ps->fd_up = client;
 	ps->fd_down = back;
 	ps->ssl = ssl;
@@ -2447,6 +2465,9 @@ handle_clear_accept(struct ev_loop *loop, ev_io *w, int revents)
 	sslctx *so;
 	proxystate *ps;
 	socklen_t sl = sizeof(addr);
+	struct addrinfo *backaddr;
+	struct addrinfo hints;
+
 	int client = accept(w->fd, (struct sockaddr *) &addr, &sl);
 	if (client == -1) {
 		switch (errno) {
@@ -2494,9 +2515,22 @@ handle_clear_accept(struct ev_loop *loop, ev_io *w, int revents)
 
 	settcpkeepalive(client);
 
-	int back = create_back_socket();
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = 0;
+	const int gai_err = getaddrinfo(CONFIG->BACK_IP, CONFIG->BACK_PORT,
+	    &hints, &backaddr);
+	if (gai_err != 0) {
+		(void)close(client);
+		ERR("{getaddrinfo-backend}: %s\n", gai_strerror(gai_err));
+		return;
+	}
+
+	int back = create_back_socket(backaddr);
 	if (back == -1) {
 		close(client);
+		freeaddrinfo(backaddr);
 		ERR("{backend-socket}: %s\n", strerror(errno));
 		return;
 	}
@@ -2519,6 +2553,7 @@ handle_clear_accept(struct ev_loop *loop, ev_io *w, int revents)
 
 	ALLOC_OBJ(ps, PROXYSTATE_MAGIC);
 
+	ps->backaddr = backaddr;
 	ps->fd_up = client;
 	ps->fd_down = back;
 	ps->ssl = ssl;
@@ -2730,6 +2765,7 @@ init_globals(void)
 {
 	/* backaddr */
 	struct addrinfo hints;
+	struct addrinfo *backaddr;
 
 	VTAILQ_INIT(&frontends);
 	VTAILQ_INIT(&worker_procs);
@@ -2744,6 +2780,7 @@ init_globals(void)
 		ERR("{getaddrinfo-backend}: %s\n", gai_strerror(gai_err));
 		exit(1);
 	}
+	freeaddrinfo(backaddr);
 
 #ifdef USE_SHARED_CACHE
 	if (CONFIG->SHARED_CACHE) {
