@@ -2763,24 +2763,8 @@ drop_privileges(void)
 void
 init_globals(void)
 {
-	/* backaddr */
-	struct addrinfo hints;
-	struct addrinfo *backaddr;
-
 	VTAILQ_INIT(&frontends);
 	VTAILQ_INIT(&worker_procs);
-
-	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags = 0;
-	const int gai_err = getaddrinfo(CONFIG->BACK_IP, CONFIG->BACK_PORT,
-	    &hints, &backaddr);
-	if (gai_err != 0) {
-		ERR("{getaddrinfo-backend}: %s\n", gai_strerror(gai_err));
-		exit(1);
-	}
-	freeaddrinfo(backaddr);
 
 #ifdef USE_SHARED_CACHE
 	if (CONFIG->SHARED_CACHE) {

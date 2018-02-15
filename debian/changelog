@@ -1,3 +1,9 @@
+hitch (1.4.6-1awn1) precise; urgency=low
+
+  * Fix issues with missing DNS names on startup
+
+ -- Arctic Wolf Networks Inc. Development <dev@arcticwolf.com>  Thu, 15 Feb 2018 15:27:00 +0000
+
 hitch (1.4.6-1awn0) precise; urgency=low
 
   * AWN package
